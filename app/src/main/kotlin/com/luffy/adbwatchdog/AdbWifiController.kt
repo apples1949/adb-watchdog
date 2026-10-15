@@ -25,14 +25,16 @@ object AdbWifiController {
      * Wireless debugging is bound to Wi-Fi; recovering while no Wi-Fi is
      * connected is pointless (the toggle would be forced on without a network
      * to serve), so callers should pause instead.
+     *
+     * Never throws: if anything goes wrong (missing permission on exotic ROMs,
+     * etc.) we report "no Wi-Fi" so the watchdog pauses instead of crashing.
      */
-    fun isWifiConnected(ctx: Context): Boolean {
+    fun isWifiConnected(ctx: Context): Boolean = runCatching {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-            ?: return false
-        val net = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(net) ?: return false
-        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-    }
+        val net = cm?.activeNetwork
+        val caps = net?.let { cm.getNetworkCapabilities(it) }
+        caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+    }.getOrDefault(false)
 
     /**
      * Try to enable wireless ADB. Returns the strategy that succeeded, or null if both failed.
