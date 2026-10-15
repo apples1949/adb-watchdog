@@ -23,7 +23,7 @@ class WatchdogService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        startForeground(NOTIF_ID, buildNotification(state = "starting"))
+        startForeground(NOTIF_ID, buildNotification(R.string.notif_starting))
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -46,19 +46,31 @@ class WatchdogService : LifecycleService() {
             val enabled = AdbWifiController.isEnabled(this)
 
             if (!enabled) {
-                Log.i(TAG, "Wireless ADB is OFF — attempting recovery")
-                updateNotification("recovering")
-                val outcome = AdbWifiController.recover(this)
-                if (outcome != null) {
-                    Log.i(TAG, "Recovered via $outcome")
-                    incrementCounter(prefs, KEY_RECOVERIES)
+                if (AdbWifiController.isWifiConnected(this)) {
+                    Log.i(TAG, "Wireless ADB is OFF — attempting recovery")
+                    updateNotification(R.string.notif_recovering)
+                    val outcome = AdbWifiController.recover(this)
+                    if (outcome != null) {
+                        Log.i(TAG, "Recovered via $outcome")
+                        incrementCounter(prefs, KEY_RECOVERIES)
+                    } else {
+                        Log.w(TAG, "Recovery failed")
+                        incrementCounter(prefs, KEY_FAILURES)
+                    }
                 } else {
-                    Log.w(TAG, "Recovery failed")
-                    incrementCounter(prefs, KEY_FAILURES)
+                    // No Wi-Fi: recovering is pointless (wireless debugging is bound
+                    // to Wi-Fi). Pause until the network comes back; the next poll
+                    // iteration will retry automatically.
+                    Log.i(TAG, "Wireless ADB is OFF but Wi-Fi is disconnected — recovery paused")
                 }
             }
 
-            updateNotification(if (AdbWifiController.isEnabled(this)) "up" else "down")
+            val stateRes = when {
+                AdbWifiController.isEnabled(this) -> R.string.notif_up
+                !AdbWifiController.isWifiConnected(this) -> R.string.notif_paused_no_wifi
+                else -> R.string.notif_down
+            }
+            updateNotification(stateRes)
             delay(intervalMs)
         }
     }
@@ -67,20 +79,20 @@ class WatchdogService : LifecycleService() {
         prefs.edit().putInt(key, prefs.getInt(key, 0) + 1).apply()
     }
 
-    private fun updateNotification(state: String) {
+    private fun updateNotification(stateRes: Int) {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification(state))
+        nm.notify(NOTIF_ID, buildNotification(stateRes))
     }
 
-    private fun buildNotification(state: String): Notification {
+    private fun buildNotification(stateRes: Int): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pi = PendingIntent.getActivity(
             this, 0, intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ADB Watchdog")
-            .setContentText("Wireless ADB: $state")
+            .setContentTitle(getString(R.string.app_name))
+            .setContentText(getString(stateRes))
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
             .setContentIntent(pi)
             .setOngoing(true)
@@ -94,7 +106,7 @@ class WatchdogService : LifecycleService() {
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
             nm.createNotificationChannel(
                 NotificationChannel(
-                    CHANNEL_ID, "ADB Watchdog", NotificationManager.IMPORTANCE_LOW
+                    CHANNEL_ID, getString(R.string.notif_channel_name), NotificationManager.IMPORTANCE_LOW
                 )
             )
         }
@@ -109,6 +121,7 @@ class WatchdogService : LifecycleService() {
         const val KEY_INTERVAL_S = "interval_s"
         const val KEY_RECOVERIES = "recoveries"
         const val KEY_FAILURES = "failures"
+        const val KEY_LANG = "lang"
         const val DEFAULT_INTERVAL_S = 10
 
         fun prefs(ctx: Context): SharedPreferences =

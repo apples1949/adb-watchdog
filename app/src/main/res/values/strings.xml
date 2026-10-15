@@ -3,4 +3,41 @@
     <string name="app_name">ADB Watchdog</string>
     <string name="a11y_description">Re-enables wireless debugging via the Settings UI when the secure-settings flag is not honored.</string>
     <string name="a11y_summary">UI fallback recovery for wireless ADB</string>
+
+    <!-- Main screen -->
+    <string name="watchdog_enabled">Watchdog enabled</string>
+    <string name="btn_accessibility">Open Accessibility settings</string>
+    <string name="btn_battery">Disable battery optimization</string>
+    <string name="btn_test">Test recovery now</string>
+    <string name="btn_language">中文 / English</string>
+
+    <!-- Status panel -->
+    <string name="status_wireless">Wireless ADB</string>
+    <string name="status_perm">WRITE_SECURE_SETTINGS</string>
+    <string name="status_a11y">AccessibilityService</string>
+    <string name="status_wifi">Wi-Fi</string>
+    <string name="status_counters">Recoveries / failures</string>
+
+    <string name="val_on">ON</string>
+    <string name="val_off">OFF</string>
+    <string name="val_granted">granted</string>
+    <string name="val_not_granted">NOT granted</string>
+    <string name="val_bound">bound</string>
+    <string name="val_not_bound">not bound</string>
+    <string name="val_connected">connected</string>
+    <string name="val_disconnected">disconnected</string>
+
+    <string name="manual_recover_fmt">manual recover -> %1$s</string>
+
+    <!-- Grant hint -->
+    <string name="hint_granted">Secure-settings path is active — recovery should be instant.</string>
+    <string name="hint_not_granted">Run on your PC once (USB ADB or any active ADB session):\n  adb shell pm grant %1$s android.permission.WRITE_SECURE_SETTINGS\nAfter that, the watchdog can re-enable wireless ADB without UI navigation.</string>
+
+    <!-- Notification -->
+    <string name="notif_channel_name">ADB Watchdog</string>
+    <string name="notif_starting">Wireless ADB: starting</string>
+    <string name="notif_up">Wireless ADB: up</string>
+    <string name="notif_down">Wireless ADB: down</string>
+    <string name="notif_recovering">Wireless ADB: recovering</string>
+    <string name="notif_paused_no_wifi">Wireless ADB: paused (no Wi-Fi)</string>
 </resources>

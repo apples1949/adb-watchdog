@@ -3,6 +3,8 @@ package com.luffy.adbwatchdog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.provider.Settings
 import android.util.Log
 import kotlinx.coroutines.delay
@@ -19,9 +21,24 @@ object AdbWifiController {
         ctx.checkSelfPermission(SECURE_SETTINGS_PERM) == PackageManager.PERMISSION_GRANTED
 
     /**
+     * True when the phone currently has a Wi-Fi network as its active network.
+     * Wireless debugging is bound to Wi-Fi; recovering while no Wi-Fi is
+     * connected is pointless (the toggle would be forced on without a network
+     * to serve), so callers should pause instead.
+     */
+    fun isWifiConnected(ctx: Context): Boolean {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return false
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+    }
+
+    /**
      * Try to enable wireless ADB. Returns the strategy that succeeded, or null if both failed.
      */
     suspend fun recover(ctx: Context): Strategy? {
+        if (!isWifiConnected(ctx)) return Strategy.PausedNoWifi
         if (isEnabled(ctx)) return Strategy.AlreadyOn
 
         if (hasSecureSettingsPermission(ctx)) {
@@ -55,7 +72,7 @@ object AdbWifiController {
         return null
     }
 
-    enum class Strategy { AlreadyOn, SecureSettings, Accessibility }
+    enum class Strategy { AlreadyOn, SecureSettings, Accessibility, PausedNoWifi }
 
     const val ACTION_RECOVER = "com.luffy.adbwatchdog.RECOVER"
 }

@@ -6,6 +6,8 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import com.luffy.adbwatchdog.databinding.ActivityMainBinding
 import kotlinx.coroutines.Job
@@ -18,6 +20,14 @@ class MainActivity : AppCompatActivity() {
     private var statusJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Restore the language chosen via the toggle button (persists across launches).
+        val savedLang = WatchdogService.prefs(this).getString(WatchdogService.KEY_LANG, null)
+        if (savedLang == "zh") {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("zh-CN"))
+        } else if (savedLang == "en") {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+        }
+
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -44,9 +54,31 @@ class MainActivity : AppCompatActivity() {
         binding.btnTest.setOnClickListener {
             lifecycleScope.launch {
                 val s = AdbWifiController.recover(this@MainActivity)
-                refreshStatus(extra = "manual recover -> $s")
+                refreshStatus(extra = getString(R.string.manual_recover_fmt, s?.toString() ?: "null"))
             }
         }
+
+        binding.btnLanguage.setOnClickListener { toggleLanguage() }
+    }
+
+    /**
+     * Toggle the app language between Chinese and English and persist the choice.
+     * setApplicationLocales recreates the activity automatically.
+     */
+    private fun toggleLanguage() {
+        val prefs = WatchdogService.prefs(this)
+        val current = AppCompatDelegate.getApplicationLocales()
+        val currentIsZh = if (!current.isEmpty) {
+            current[0]?.language == "zh"
+        } else {
+            resources.configuration.locales[0].language == "zh"
+        }
+        val target = if (currentIsZh) "en" else "zh"
+        prefs.edit().putString(WatchdogService.KEY_LANG, target).apply()
+        AppCompatDelegate.setApplicationLocales(
+            if (target == "zh") LocaleListCompat.forLanguageTags("zh-CN")
+            else LocaleListCompat.forLanguageTags("en")
+        )
     }
 
     override fun onStart() {
@@ -69,23 +101,28 @@ class MainActivity : AppCompatActivity() {
         val adbOn = AdbWifiController.isEnabled(this)
         val granted = AdbWifiController.hasSecureSettingsPermission(this)
         val a11y = WatchdogAccessibilityService.isBound()
+        val wifi = AdbWifiController.isWifiConnected(this)
         val recoveries = prefs.getInt(WatchdogService.KEY_RECOVERIES, 0)
         val failures = prefs.getInt(WatchdogService.KEY_FAILURES, 0)
 
         binding.status.text = buildString {
-            append("Wireless ADB        : ").append(if (adbOn) "ON" else "OFF").append('\n')
-            append("WRITE_SECURE_SETTINGS: ").append(if (granted) "granted" else "NOT granted").append('\n')
-            append("AccessibilityService : ").append(if (a11y) "bound" else "not bound").append('\n')
-            append("Recoveries / failures: ").append(recoveries).append(" / ").append(failures)
+            append(getString(R.string.status_wireless)).append(" : ")
+                .append(getString(if (adbOn) R.string.val_on else R.string.val_off)).append('\n')
+            append(getString(R.string.status_perm)).append(" : ")
+                .append(getString(if (granted) R.string.val_granted else R.string.val_not_granted)).append('\n')
+            append(getString(R.string.status_a11y)).append(" : ")
+                .append(getString(if (a11y) R.string.val_bound else R.string.val_not_bound)).append('\n')
+            append(getString(R.string.status_wifi)).append(" : ")
+                .append(getString(if (wifi) R.string.val_connected else R.string.val_disconnected)).append('\n')
+            append(getString(R.string.status_counters)).append(" : ")
+                .append(recoveries).append(" / ").append(failures)
             if (extra != null) append('\n').append(extra)
         }
 
         binding.grantHint.text = if (granted) {
-            "Secure-settings path is active — recovery should be instant."
+            getString(R.string.hint_granted)
         } else {
-            "Run on your PC once (USB ADB or any active ADB session):\n" +
-                "  adb shell pm grant $packageName android.permission.WRITE_SECURE_SETTINGS\n" +
-                "After that, the watchdog can re-enable wireless ADB without UI navigation."
+            getString(R.string.hint_not_granted, packageName)
         }
     }
 }

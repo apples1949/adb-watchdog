@@ -1,5 +1,11 @@
 # ADB Watchdog (Android)
 
+English | [简体中文](README_zh-CN.md)
+
+> **This fork**: every push auto-builds and publishes the APK to the
+> [latest release](../../releases/latest). New in this fork: Wi-Fi pause,
+> in-app language toggle (中文 / English), auto-release workflow.
+
 On-device watchdog for **wireless ADB** on Realme Narzo 50 (ColorOS). Polls
 `Settings.Global.adb_wifi_enabled`; when it goes to 0, tries to flip it back
 to 1 via the **secure-settings** path, and falls back to an **AccessibilityService**
