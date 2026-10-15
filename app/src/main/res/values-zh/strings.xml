@@ -31,7 +31,9 @@
 
     <!-- 授权提示 -->
     <string name="hint_granted">安全设置通道已激活，恢复应为瞬时完成。</string>
-    <string name="hint_not_granted">请在电脑上执行一次（USB ADB 或任意可用的 ADB 会话）：\n  adb shell pm grant %1$s android.permission.WRITE_SECURE_SETTINGS\n之后看门狗即可在不进入设置界面的情况下恢复无线调试。</string>
+    <string name="hint_not_granted">尚未授权。请在电脑上执行一次（USB ADB 或任意可用的 ADB 会话）——点击下方命令即可复制。之后看门狗即可瞬时、无感地恢复无线调试。</string>
+    <string name="grant_cmd_fmt">adb shell pm grant %1$s android.permission.WRITE_SECURE_SETTINGS</string>
+    <string name="copy_toast_ok">已复制到剪贴板</string>
 
     <!-- 通知 -->
     <string name="notif_channel_name">ADB 看门狗</string>

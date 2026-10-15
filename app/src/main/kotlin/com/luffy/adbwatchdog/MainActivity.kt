@@ -1,13 +1,17 @@
 package com.luffy.adbwatchdog
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.luffy.adbwatchdog.databinding.ActivityMainBinding
 import kotlinx.coroutines.Job
@@ -59,6 +63,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnLanguage.setOnClickListener { toggleLanguage() }
+
+        // Tap the command box to copy the adb grant command.
+        binding.grantCommand.setOnClickListener {
+            val cm = getSystemService(ClipboardManager::class.java)
+            cm?.setPrimaryClip(ClipData.newPlainText("adb", binding.grantCommand.text))
+            Toast.makeText(this, R.string.copy_toast_ok, Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
@@ -122,7 +133,11 @@ class MainActivity : AppCompatActivity() {
         binding.grantHint.text = if (granted) {
             getString(R.string.hint_granted)
         } else {
-            getString(R.string.hint_not_granted, packageName)
+            getString(R.string.hint_not_granted)
+        }
+        binding.grantCommand.isVisible = !granted
+        if (!granted) {
+            binding.grantCommand.text = getString(R.string.grant_cmd_fmt, packageName)
         }
     }
 }

@@ -31,7 +31,9 @@
 
     <!-- Grant hint -->
     <string name="hint_granted">Secure-settings path is active — recovery should be instant.</string>
-    <string name="hint_not_granted">Run on your PC once (USB ADB or any active ADB session):\n  adb shell pm grant %1$s android.permission.WRITE_SECURE_SETTINGS\nAfter that, the watchdog can re-enable wireless ADB without UI navigation.</string>
+    <string name="hint_not_granted">Not granted yet. Run on your PC once (USB ADB or any active ADB session) — tap the command below to copy it. Afterwards recovery is instant and silent.</string>
+    <string name="grant_cmd_fmt">adb shell pm grant %1$s android.permission.WRITE_SECURE_SETTINGS</string>
+    <string name="copy_toast_ok">Copied to clipboard</string>
 
     <!-- Notification -->
     <string name="notif_channel_name">ADB Watchdog</string>
