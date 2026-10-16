@@ -128,7 +128,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun startNsdDiscovery() {
         if (discoveryListener != null || nsdBroken) return
-        val nm = getSystemService(NsdManager::class.java) ?: run { nsdBroken = true; return }
+        // getSystemService(NsdManager) itself can throw SecurityException on
+        // ROMs that gate NSD behind INTERNET — never let that crash the app.
+        val nm = try { getSystemService(NsdManager::class.java) } catch (t: Throwable) { null }
+        if (nm == null) { nsdBroken = true; return }
         val listener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(regType: String?) {}
 
