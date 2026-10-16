@@ -6,7 +6,6 @@ import android.content.Intent
 import android.net.Uri
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
@@ -144,8 +143,7 @@ class MainActivity : AppCompatActivity() {
                     override fun onServiceResolved(info: NsdServiceInfo?) {
                         resolving = false
                         if (info == null) return
-                        val host = if (Build.VERSION.SDK_INT >= 34) info.serviceHost
-                        else info.host?.hostAddress
+                        val host = info.hostAddresses.firstOrNull()?.hostAddress
                         val port = info.port
                         if (host.isNullOrBlank() || port <= 0) return
                         if (host !in localAddresses()) return
