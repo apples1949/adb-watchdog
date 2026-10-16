@@ -16,10 +16,12 @@
     <string name="status_perm">安全设置权限</string>
     <string name="status_a11y">无障碍服务</string>
     <string name="status_wifi">Wi-Fi</string>
+    <string name="status_endpoint">无线调试地址</string>
     <string name="status_counters">恢复 / 失败</string>
 
     <string name="val_on">开</string>
     <string name="val_off">关</string>
+    <string name="val_searching">发现中...</string>
     <string name="val_granted">已授权</string>
     <string name="val_not_granted">未授权</string>
     <string name="val_bound">已绑定</string>

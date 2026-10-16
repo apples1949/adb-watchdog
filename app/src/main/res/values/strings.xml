@@ -16,10 +16,12 @@
     <string name="status_perm">WRITE_SECURE_SETTINGS</string>
     <string name="status_a11y">AccessibilityService</string>
     <string name="status_wifi">Wi-Fi</string>
+    <string name="status_endpoint">Wireless ADB address</string>
     <string name="status_counters">Recoveries / failures</string>
 
     <string name="val_on">ON</string>
     <string name="val_off">OFF</string>
+    <string name="val_searching">searching...</string>
     <string name="val_granted">granted</string>
     <string name="val_not_granted">NOT granted</string>
     <string name="val_bound">bound</string>
