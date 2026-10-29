@@ -32,7 +32,13 @@ jobs:
       # ubuntu-latest 自带 Android SDK（ANDROID_HOME 已设、许可已接受），
       # AGP 8.5.2 + compileSdk 34 可直接构建
 
-      # 签名：仓库根目录的 debug.keystore（随仓库提交，build.gradle.kts 直接引用）
+      # 签名：keystore 以 base64 文本提交在 keystore/debug.keystore.b64
+      # （.gitignore 忽略了 *.keystore，直接传二进制文件会被静默跳过）。
+      - name: Decode signing keystore
+        run: |
+          base64 -d keystore/debug.keystore.b64 > debug.keystore
+          echo "keystore size: $(wc -c < debug.keystore) bytes"
+          sha256sum debug.keystore
 
       - name: Build debug APK
         run: |
