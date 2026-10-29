@@ -32,22 +32,7 @@ jobs:
       # ubuntu-latest 自带 Android SDK（ANDROID_HOME 已设、许可已接受），
       # AGP 8.5.2 + compileSdk 34 可直接构建
 
-      # 还原固定 debug 签名（secret: DEBUG_KEYSTORE_BASE64）。
-      # 同时写到仓库根目录（build.gradle.kts 显式引用）和 ~/.android（兜底），
-      # 避免 AGP 使用随机生成的 debug 钥匙。
-      - name: Restore fixed debug keystore
-        env:
-          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
-        run: |
-          mkdir -p ~/.android
-          if [ -z "$DEBUG_KEYSTORE_BASE64" ]; then
-            echo "::warning::Secret DEBUG_KEYSTORE_BASE64 未设置，本次使用随机 debug 签名（无法覆盖安装）"
-          else
-            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/debug.keystore"
-            cp "$GITHUB_WORKSPACE/debug.keystore" ~/.android/debug.keystore
-            echo "Fixed debug keystore restored: $(wc -c < "$GITHUB_WORKSPACE/debug.keystore") bytes"
-            sha256sum "$GITHUB_WORKSPACE/debug.keystore" || true
-          fi
+      # 签名：仓库根目录的 debug.keystore（随仓库提交，build.gradle.kts 直接引用）
 
       - name: Build debug APK
         run: |
@@ -55,12 +40,14 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleDebug --stacktrace --console=plain 2>&1 | tee build.log
 
-      # 打印 APK 实际签名证书指纹（SHA-256 digest 应与固定 keystore 一致）
+      # 打印 APK 实际签名证书指纹，并写入发行说明（公开可核对）
       - name: Verify APK signing certificate
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
           if [ -n "$APKSIGNER" ]; then
-            "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | head -20
+            "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | tee cert.txt | head -20
+            DIGEST=$(grep -i "SHA-256 digest" cert.txt | head -1 | sed 's/.*digest: //')
+            echo "CERT_DIGEST=${DIGEST}" >> "$GITHUB_ENV"
           else
             echo "apksigner not found, skipped"
           fi
@@ -102,7 +89,8 @@ jobs:
           VERSION="${VERSION:-unknown}"
           NOTES=$(cat <<EOF
           自动构建：v$VERSION（commit $SHORT，$(date -u +'%Y-%m-%d %H:%M UTC')）
-          签名：固定 debug 签名（证书指纹 778962e7）
+          签名：固定 debug 签名
+          签名证书 SHA-256：${CERT_DIGEST:-unknown}
 
           - 手机上已装同一签名版本：直接下载覆盖安装，数据与授权保留
           - 若提示"签名不一致"（装机的是历史随机签名版）：卸载旧版后再安装，
