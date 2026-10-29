@@ -33,7 +33,8 @@ jobs:
       # AGP 8.5.2 + compileSdk 34 可直接构建
 
       # 还原固定 debug 签名（secret: DEBUG_KEYSTORE_BASE64）。
-      # 签名固定后，新构建可以直接覆盖安装，且 WRITE_SECURE_SETTINGS 授权不丢。
+      # 同时写到仓库根目录（build.gradle.kts 显式引用）和 ~/.android（兜底），
+      # 避免 AGP 使用随机生成的 debug 钥匙。
       - name: Restore fixed debug keystore
         env:
           DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
@@ -42,8 +43,10 @@ jobs:
           if [ -z "$DEBUG_KEYSTORE_BASE64" ]; then
             echo "::warning::Secret DEBUG_KEYSTORE_BASE64 未设置，本次使用随机 debug 签名（无法覆盖安装）"
           else
-            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > ~/.android/debug.keystore
-            echo "Fixed debug keystore restored ($(wc -c < ~/.android/debug.keystore) bytes)"
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/debug.keystore"
+            cp "$GITHUB_WORKSPACE/debug.keystore" ~/.android/debug.keystore
+            echo "Fixed debug keystore restored: $(wc -c < "$GITHUB_WORKSPACE/debug.keystore") bytes"
+            sha256sum "$GITHUB_WORKSPACE/debug.keystore" || true
           fi
 
       - name: Build debug APK
@@ -51,6 +54,16 @@ jobs:
           set -o pipefail
           chmod +x gradlew
           ./gradlew :app:assembleDebug --stacktrace --console=plain 2>&1 | tee build.log
+
+      # 打印 APK 实际签名证书指纹（SHA-256 digest 应与固定 keystore 一致）
+      - name: Verify APK signing certificate
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | head -20
+          else
+            echo "apksigner not found, skipped"
+          fi
 
       # 编译/构建失败时，把完整日志原样打印到这一步的输出里
       - name: Print full build log on failure
@@ -89,10 +102,10 @@ jobs:
           VERSION="${VERSION:-unknown}"
           NOTES=$(cat <<EOF
           自动构建：v$VERSION（commit $SHORT，$(date -u +'%Y-%m-%d %H:%M UTC')）
-          签名：固定 debug 签名
+          签名：固定 debug 签名（证书指纹 778962e7）
 
-          - 手机上已是 v0.2.4 或更高：直接下载覆盖安装，应用数据与授权原样保留
-          - 手机上还是 v0.2.3 或更早（旧的随机签名版）：请先卸载旧版再安装，
+          - 手机上已装同一签名版本：直接下载覆盖安装，数据与授权保留
+          - 若提示"签名不一致"（装机的是历史随机签名版）：卸载旧版后再安装，
             安装后执行一次授权：
             adb shell pm grant com.luffy.adbwatchdog android.permission.WRITE_SECURE_SETTINGS
           EOF
