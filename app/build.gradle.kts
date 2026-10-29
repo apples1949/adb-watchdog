@@ -15,8 +15,8 @@ android {
         applicationId = "com.luffy.adbwatchdog"
         minSdk = 30
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.2.7"
+        versionCode = 10
+        versionName = "0.2.8"
     }
 
     signingConfigs {
@@ -30,9 +30,9 @@ android {
 
     buildTypes {
         debug {
-            if (fixedKeystore.exists()) {
-                signingConfig = signingConfigs.getByName("fixedDebug")
-            }
+            // debug.keystore 直接随仓库提交（仓库根目录），无条件使用它签名。
+            // 文件缺失时构建会立刻报错，而不是静默回退到随机 debug 钥匙。
+            signingConfig = signingConfigs.getByName("fixedDebug")
         }
         release {
             isMinifyEnabled = false
