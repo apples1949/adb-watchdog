@@ -1,16 +1,19 @@
 package com.luffy.adbwatchdog
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
@@ -50,7 +53,13 @@ class MainActivity : AppCompatActivity() {
         binding.enableSwitch.isChecked = prefs.getBoolean(WatchdogService.KEY_ENABLED, false)
         binding.enableSwitch.setOnCheckedChangeListener { _, on ->
             prefs.edit().putBoolean(WatchdogService.KEY_ENABLED, on).apply()
-            if (on) WatchdogService.start(this) else WatchdogService.stop(this)
+            if (on) {
+                WatchdogService.start(this)
+                ReviveReceiver.schedule(this)
+            } else {
+                WatchdogService.stop(this)
+                ReviveReceiver.cancel(this)
+            }
         }
 
         binding.btnAccessibility.setOnClickListener {
@@ -61,6 +70,13 @@ class MainActivity : AppCompatActivity() {
             startActivity(
                 Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
                     .setData(Uri.parse("package:$packageName"))
+            )
+        }
+
+        binding.btnNotifications.setOnClickListener {
+            startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
             )
         }
 
@@ -79,6 +95,20 @@ class MainActivity : AppCompatActivity() {
             cm?.setPrimaryClip(ClipData.newPlainText("adb", binding.grantCommand.text))
             Toast.makeText(this, R.string.copy_toast_ok, Toast.LENGTH_SHORT).show()
         }
+
+        // Android 13+：常驻通知需要运行时授权，否则通知栏里看不到守护状态
+        if (Build.VERSION.SDK_INT >= 33 &&
+            !NotificationManagerCompat.from(this).areNotificationsEnabled()
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_NOTIFICATIONS) refreshStatus()
     }
 
     /**
@@ -211,6 +241,9 @@ class MainActivity : AppCompatActivity() {
         val recoveries = prefs.getInt(WatchdogService.KEY_RECOVERIES, 0)
         val failures = prefs.getInt(WatchdogService.KEY_FAILURES, 0)
         val ep = adbEndpoint
+        val notifOn = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val hb = prefs.getLong(WatchdogService.KEY_HEARTBEAT, 0L)
+        val hbSec = if (hb <= 0L) -1 else ((System.currentTimeMillis() - hb) / 1000).toInt()
 
         binding.status.text = buildString {
             append(getString(R.string.status_wireless)).append(" : ")
@@ -228,6 +261,15 @@ class MainActivity : AppCompatActivity() {
                     else -> getString(R.string.val_searching)
                 }
             ).append('\n')
+            append(getString(R.string.status_notif)).append(" : ")
+                .append(getString(if (notifOn) R.string.val_allowed else R.string.val_denied)).append('\n')
+            append(getString(R.string.status_heartbeat)).append(" : ").append(
+                when {
+                    hbSec < 0 -> getString(R.string.val_never)
+                    hbSec <= 30 -> getString(R.string.hb_seconds_fmt, hbSec)
+                    else -> getString(R.string.hb_stale_fmt, hbSec)
+                }
+            ).append('\n')
             append(getString(R.string.status_counters)).append(" : ")
                 .append(recoveries).append(" / ").append(failures)
             if (extra != null) append('\n').append(extra)
@@ -242,5 +284,9 @@ class MainActivity : AppCompatActivity() {
         if (!granted) {
             binding.grantCommand.text = getString(R.string.grant_cmd_fmt, packageName)
         }
+    }
+
+    companion object {
+        private const val REQ_NOTIFICATIONS = 1001
     }
 }

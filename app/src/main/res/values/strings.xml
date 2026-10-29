@@ -8,6 +8,7 @@
     <string name="watchdog_enabled">Watchdog enabled</string>
     <string name="btn_accessibility">Open Accessibility settings</string>
     <string name="btn_battery">Disable battery optimization</string>
+    <string name="btn_notifications">Notification settings</string>
     <string name="btn_test">Test recovery now</string>
     <string name="btn_language">中文 / English</string>
 
@@ -17,11 +18,18 @@
     <string name="status_a11y">AccessibilityService</string>
     <string name="status_wifi">Wi-Fi</string>
     <string name="status_endpoint">Wireless ADB address</string>
+    <string name="status_notif">Notifications</string>
+    <string name="status_heartbeat">Service heartbeat</string>
     <string name="status_counters">Recoveries / failures</string>
 
     <string name="val_on">ON</string>
     <string name="val_off">OFF</string>
     <string name="val_searching">searching...</string>
+    <string name="val_allowed">allowed</string>
+    <string name="val_denied">not allowed</string>
+    <string name="val_never">never</string>
+    <string name="hb_seconds_fmt">%1$d s ago</string>
+    <string name="hb_stale_fmt">%1$d s ago (may have been killed)</string>
     <string name="val_granted">granted</string>
     <string name="val_not_granted">NOT granted</string>
     <string name="val_bound">bound</string>

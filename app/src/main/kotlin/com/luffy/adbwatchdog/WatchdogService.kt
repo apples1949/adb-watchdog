@@ -31,7 +31,21 @@ class WatchdogService : LifecycleService() {
         if (pollJob?.isActive != true) {
             pollJob = lifecycleScope.launch { pollLoop() }
         }
+        // 每次服务被拉起（包括被系统杀掉后的 START_STICKY 重启、复活链拉起），
+        // 都把下一跳复活闹钟续上，形成自维持链条。
+        ReviveReceiver.schedule(this)
         return START_STICKY
+    }
+
+    /**
+     * 用户从最近任务里把 app 划掉时触发。此时进程可能很快被杀，
+     * 立刻排一个 5 秒后的复活闹钟，让服务自己爬回来。
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (prefs(this).getBoolean(KEY_ENABLED, false)) {
+            ReviveReceiver.schedule(this, 5_000L)
+        }
+        super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
@@ -43,6 +57,8 @@ class WatchdogService : LifecycleService() {
         val prefs = prefs(this)
         while (true) {
             val intervalMs = prefs.getInt(KEY_INTERVAL_S, DEFAULT_INTERVAL_S).coerceAtLeast(2) * 1000L
+            // 心跳：主界面据此判断服务是否还活着
+            prefs.edit().putLong(KEY_HEARTBEAT, System.currentTimeMillis()).apply()
             val enabled = AdbWifiController.isEnabled(this)
 
             if (!enabled) {
@@ -81,7 +97,8 @@ class WatchdogService : LifecycleService() {
 
     private fun updateNotification(stateRes: Int) {
         val nm = getSystemService(NotificationManager::class.java)
-        nm.notify(NOTIF_ID, buildNotification(stateRes))
+        // 没有通知权限时 notify 可能被拒，包一层避免任何意外
+        runCatching { nm.notify(NOTIF_ID, buildNotification(stateRes)) }
     }
 
     private fun buildNotification(stateRes: Int): Notification {
@@ -97,24 +114,35 @@ class WatchdogService : LifecycleService() {
             .setContentIntent(pi)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setShowWhen(false)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            // Android 12+：前台服务通知立即显示，不等待系统弹窗延迟
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 
     private fun createChannel() {
         val nm = getSystemService(NotificationManager::class.java)
         if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            nm.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID, getString(R.string.notif_channel_name), NotificationManager.IMPORTANCE_LOW
-                )
+            val ch = NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.notif_channel_name),
+                // DEFAULT（而非 LOW）：LOW 会被系统折叠进"静默通知"区域，
+                // MagicOS 甚至会直接隐藏，这是之前"通知栏看不到状态"的主因。
+                NotificationManager.IMPORTANCE_DEFAULT
             )
+            ch.setSound(null, null)          // 常驻通知不响铃
+            ch.enableVibration(false)
+            ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            nm.createNotificationChannel(ch)
         }
     }
 
     companion object {
         private const val TAG = "AdbWatchdog"
-        private const val CHANNEL_ID = "watchdog"
+        // v2：旧渠道以 LOW 重要级别创建过，改级别不会生效，因此换新 ID
+        private const val CHANNEL_ID = "watchdog_v2"
         private const val NOTIF_ID = 1
         const val PREFS = "watchdog_prefs"
         const val KEY_ENABLED = "enabled"
@@ -122,6 +150,8 @@ class WatchdogService : LifecycleService() {
         const val KEY_RECOVERIES = "recoveries"
         const val KEY_FAILURES = "failures"
         const val KEY_LANG = "lang"
+        const val KEY_HEARTBEAT = "last_heartbeat"
+        const val KEY_LAST_REVIVE = "last_revive"
         const val DEFAULT_INTERVAL_S = 10
 
         fun prefs(ctx: Context): SharedPreferences =
