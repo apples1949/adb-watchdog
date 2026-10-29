@@ -34,6 +34,14 @@
             android:layout_marginBottom="16dp" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnWirelessDebugging"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_wireless_settings"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 仅在未授予 WRITE_SECURE_SETTINGS 时显示（无 adb 场景下的唯一恢复路径） -->
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAccessibility"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

@@ -6,6 +6,7 @@
 
     <!-- Main screen -->
     <string name="watchdog_enabled">Watchdog enabled</string>
+    <string name="btn_wireless_settings">Wireless debugging settings</string>
     <string name="btn_accessibility">Open Accessibility settings</string>
     <string name="btn_battery">Disable battery optimization</string>
     <string name="btn_notifications">Notification settings</string>

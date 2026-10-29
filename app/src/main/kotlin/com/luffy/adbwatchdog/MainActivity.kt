@@ -62,6 +62,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnWirelessDebugging.setOnClickListener {
+            // 先尝试直达"无线调试"子页（AOSP/Pixel 支持 show_fragment 参数），
+            // 其它 ROM 会退化为开发者选项列表，用户往下滑一步即可。
+            val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
+                .putExtra(
+                    ":settings:show_fragment",
+                    "com.android.settings.development.WirelessDebuggingFragment"
+                )
+            runCatching { startActivity(intent) }.onFailure {
+                runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
+            }
+        }
+
         binding.btnAccessibility.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -257,6 +270,7 @@ class MainActivity : AppCompatActivity() {
                 .append(getString(if (adbOn) R.string.val_on else R.string.val_off)).append('\n')
             append(getString(R.string.status_perm)).append(" : ")
                 .append(getString(if (granted) R.string.val_granted else R.string.val_not_granted)).append('\n')
+            // 无障碍状态常显（仅作信息展示；对应按钮只在未授权时出现）
             append(getString(R.string.status_a11y)).append(" : ")
                 .append(getString(if (a11y) R.string.val_bound else R.string.val_not_bound)).append('\n')
             append(getString(R.string.status_wifi)).append(" : ")
@@ -295,6 +309,8 @@ class MainActivity : AppCompatActivity() {
         if (!granted) {
             binding.grantCommand.text = getString(R.string.grant_cmd_fmt, packageName)
         }
+        // 未授权时显示无障碍入口（无 adb 场景的唯一恢复路径）；已授权则隐藏
+        binding.btnAccessibility.isVisible = !granted
     }
 
     companion object {
