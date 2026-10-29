@@ -133,6 +133,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        // 打开界面即自愈：若服务已被系统杀掉（进程可能还在），立刻重启并续排复活链
+        val prefs = WatchdogService.prefs(this)
+        if (prefs.getBoolean(WatchdogService.KEY_ENABLED, false)) {
+            WatchdogService.start(this)
+            ReviveReceiver.schedule(this)
+        }
         statusJob = lifecycleScope.launch {
             while (true) {
                 refreshStatus()
@@ -244,6 +250,7 @@ class MainActivity : AppCompatActivity() {
         val notifOn = NotificationManagerCompat.from(this).areNotificationsEnabled()
         val hb = prefs.getLong(WatchdogService.KEY_HEARTBEAT, 0L)
         val hbSec = if (hb <= 0L) -1 else ((System.currentTimeMillis() - hb) / 1000).toInt()
+        val lastRevive = prefs.getLong(WatchdogService.KEY_LAST_REVIVE, 0L)
 
         binding.status.text = buildString {
             append(getString(R.string.status_wireless)).append(" : ")
@@ -266,9 +273,13 @@ class MainActivity : AppCompatActivity() {
             append(getString(R.string.status_heartbeat)).append(" : ").append(
                 when {
                     hbSec < 0 -> getString(R.string.val_never)
-                    hbSec <= 30 -> getString(R.string.hb_seconds_fmt, hbSec)
+                    hbSec <= 90 -> getString(R.string.hb_seconds_fmt, hbSec)
                     else -> getString(R.string.hb_stale_fmt, hbSec)
                 }
+            ).append('\n')
+            append(getString(R.string.status_revive)).append(" : ").append(
+                if (lastRevive <= 0L) getString(R.string.val_never)
+                else getString(R.string.minutes_fmt, ((System.currentTimeMillis() - lastRevive) / 60000).toInt())
             ).append('\n')
             append(getString(R.string.status_counters)).append(" : ")
                 .append(recoveries).append(" / ").append(failures)

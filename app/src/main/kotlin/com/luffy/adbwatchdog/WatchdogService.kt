@@ -34,6 +34,9 @@ class WatchdogService : LifecycleService() {
         // 每次服务被拉起（包括被系统杀掉后的 START_STICKY 重启、复活链拉起），
         // 都把下一跳复活闹钟续上，形成自维持链条。
         ReviveReceiver.schedule(this)
+        // 重新声明通知渠道级别：Honor 等 ROM 会把渠道自动降级为 LOW，
+        // 未被用户锁定的字段可通过重复 create 恢复。
+        createChannel()
         return START_STICKY
     }
 
@@ -124,19 +127,19 @@ class WatchdogService : LifecycleService() {
 
     private fun createChannel() {
         val nm = getSystemService(NotificationManager::class.java)
-        if (nm.getNotificationChannel(CHANNEL_ID) == null) {
-            val ch = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.notif_channel_name),
-                // DEFAULT（而非 LOW）：LOW 会被系统折叠进"静默通知"区域，
-                // MagicOS 甚至会直接隐藏，这是之前"通知栏看不到状态"的主因。
-                NotificationManager.IMPORTANCE_DEFAULT
-            )
-            ch.setSound(null, null)          // 常驻通知不响铃
-            ch.enableVibration(false)
-            ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            nm.createNotificationChannel(ch)
-        }
+        // 注意：这里不做"已存在就跳过"判断——重复 create 是无害的，
+        // 且能把被系统/ROM 自动降级的字段（如 importance）恢复回来。
+        val ch = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.notif_channel_name),
+            // DEFAULT（而非 LOW）：LOW 会被系统折叠进"静默通知"区域，
+            // MagicOS 甚至会直接隐藏，这是之前"通知栏看不到状态"的主因。
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
+        ch.setSound(null, null)          // 常驻通知不响铃
+        ch.enableVibration(false)
+        ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        runCatching { nm.createNotificationChannel(ch) }
     }
 
     companion object {
@@ -152,7 +155,8 @@ class WatchdogService : LifecycleService() {
         const val KEY_LANG = "lang"
         const val KEY_HEARTBEAT = "last_heartbeat"
         const val KEY_LAST_REVIVE = "last_revive"
-        const val DEFAULT_INTERVAL_S = 10
+        // 30 秒轮询：对 10 秒一次的高频唤醒更省电，减少被 ROM 判为"异常耗电"而打压
+        const val DEFAULT_INTERVAL_S = 30
 
         fun prefs(ctx: Context): SharedPreferences =
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

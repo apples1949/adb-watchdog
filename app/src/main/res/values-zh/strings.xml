@@ -20,6 +20,7 @@
     <string name="status_endpoint">无线调试地址</string>
     <string name="status_notif">通知权限</string>
     <string name="status_heartbeat">服务心跳</string>
+    <string name="status_revive">上次自动复活</string>
     <string name="status_counters">恢复 / 失败</string>
 
     <string name="val_on">开</string>
@@ -30,6 +31,7 @@
     <string name="val_never">从未</string>
     <string name="hb_seconds_fmt">%1$d 秒前</string>
     <string name="hb_stale_fmt">%1$d 秒前（可能已被系统杀掉）</string>
+    <string name="minutes_fmt">%1$d 分钟前</string>
     <string name="val_granted">已授权</string>
     <string name="val_not_granted">未授权</string>
     <string name="val_bound">已绑定</string>

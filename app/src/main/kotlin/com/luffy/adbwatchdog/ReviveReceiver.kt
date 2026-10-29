@@ -35,7 +35,8 @@ class ReviveReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AdbWatchdog"
         private const val REQUEST_CODE = 100
-        const val INTERVAL_MS = 15 * 60 * 1000L
+        // 10 分钟一跳：更短的停摆窗口；唤醒开销很小（一次广播 + 服务启动）
+        const val INTERVAL_MS = 10 * 60 * 1000L
 
         /** 排下一次复活闹钟；开关未启用时直接取消。 */
         fun schedule(context: Context, delayMs: Long = INTERVAL_MS) {
