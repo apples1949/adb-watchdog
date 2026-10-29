@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// 固定签名：CI 会把 Secret 里的 keystore 写到仓库根目录的 debug.keystore。
+// 显式指定签名配置，避免 AGP 在 $HOME/.android 下自己生成随机 debug 钥匙。
+val fixedKeystore = rootProject.file(System.getenv("DEBUG_KEYSTORE_PATH") ?: "debug.keystore")
+
 android {
     namespace = "com.luffy.adbwatchdog"
     compileSdk = 34
@@ -11,11 +15,25 @@ android {
         applicationId = "com.luffy.adbwatchdog"
         minSdk = 30
         targetSdk = 34
-        versionCode = 8
-        versionName = "0.2.6"
+        versionCode = 9
+        versionName = "0.2.7"
+    }
+
+    signingConfigs {
+        create("fixedDebug") {
+            storeFile = fixedKeystore
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        debug {
+            if (fixedKeystore.exists()) {
+                signingConfig = signingConfigs.getByName("fixedDebug")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
