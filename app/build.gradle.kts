@@ -15,8 +15,8 @@ android {
         applicationId = "com.luffy.adbwatchdog"
         minSdk = 30
         targetSdk = 34
-        versionCode = 14
-        versionName = "0.3.2"
+        versionCode = 15
+        versionName = "0.3.3"
     }
 
     signingConfigs {

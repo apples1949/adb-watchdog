@@ -48,6 +48,14 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // 标题栏显示版本号
+        val versionName = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull().orEmpty()
+        supportActionBar?.title =
+            if (versionName.isBlank()) getString(R.string.app_name)
+            else "${getString(R.string.app_name)} v$versionName"
+
         val prefs = WatchdogService.prefs(this)
 
         binding.enableSwitch.isChecked = prefs.getBoolean(WatchdogService.KEY_ENABLED, false)
@@ -63,16 +71,18 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnWirelessDebugging.setOnClickListener {
-            // 先尝试直达"无线调试"子页（AOSP/Pixel 支持 show_fragment 参数），
-            // 其它 ROM 会退化为开发者选项列表，用户往下滑一步即可。
+            // 能直达子页的 ROM（AOSP/Pixel）用 show_fragment；MagicOS 等会落在开发者选项顶部，
+            // 此时用 Toast 指引用户下滑查找——这是 ROM 限制，没有更深的入口可用。
             val intent = Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
                 .putExtra(
                     ":settings:show_fragment",
                     "com.android.settings.development.WirelessDebuggingFragment"
                 )
-            runCatching { startActivity(intent) }.onFailure {
+            val ok = runCatching { startActivity(intent) }.isSuccess
+            if (!ok) {
                 runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
             }
+            Toast.makeText(this, R.string.wd_hint, Toast.LENGTH_LONG).show()
         }
 
         binding.btnAccessibility.setOnClickListener {

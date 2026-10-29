@@ -7,6 +7,7 @@
     <!-- 主界面 -->
     <string name="watchdog_enabled">看门狗开关</string>
     <string name="btn_wireless_settings">打开无线调试设置</string>
+    <string name="wd_hint">「无线调试」在开发者选项页面的下方，向下滑动查找即可。</string>
     <string name="btn_accessibility">打开无障碍设置</string>
     <string name="btn_battery">关闭电池优化</string>
     <string name="btn_notifications">通知设置</string>
