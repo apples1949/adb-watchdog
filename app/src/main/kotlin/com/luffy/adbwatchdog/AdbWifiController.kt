@@ -11,11 +11,11 @@ import kotlinx.coroutines.delay
 
 object AdbWifiController {
     private const val TAG = "AdbWatchdog"
-    private const val KEY = "adb_wifi_enabled"
+    const val KEY_ADB_WIFI = "adb_wifi_enabled"
     private const val SECURE_SETTINGS_PERM = "android.permission.WRITE_SECURE_SETTINGS"
 
     fun isEnabled(ctx: Context): Boolean =
-        Settings.Global.getInt(ctx.contentResolver, KEY, 0) == 1
+        Settings.Global.getInt(ctx.contentResolver, KEY_ADB_WIFI, 0) == 1
 
     fun hasSecureSettingsPermission(ctx: Context): Boolean =
         ctx.checkSelfPermission(SECURE_SETTINGS_PERM) == PackageManager.PERMISSION_GRANTED
@@ -45,7 +45,7 @@ object AdbWifiController {
 
         if (hasSecureSettingsPermission(ctx)) {
             val ok = runCatching {
-                Settings.Global.putInt(ctx.contentResolver, KEY, 1)
+                Settings.Global.putInt(ctx.contentResolver, KEY_ADB_WIFI, 1)
             }.isSuccess
 
             if (ok) {

@@ -7,7 +7,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.database.ContentObserver
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -19,11 +27,15 @@ import kotlinx.coroutines.launch
 class WatchdogService : LifecycleService() {
 
     private var pollJob: Job? = null
+    private var recoveryJob: Job? = null
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+    private var settingsObserver: ContentObserver? = null
 
     override fun onCreate() {
         super.onCreate()
         createChannel()
         startForeground(NOTIF_ID, buildNotification(R.string.notif_starting))
+        registerTriggers()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -53,7 +65,99 @@ class WatchdogService : LifecycleService() {
 
     override fun onDestroy() {
         pollJob?.cancel()
+        recoveryJob?.cancel()
+        unregisterTriggers()
         super.onDestroy()
+    }
+
+    /**
+     * 事件驱动触发器：比 30 秒轮询快得多。
+     * ① 网络回调：Wi-Fi 连上/能力变化 → 立刻尝试恢复；
+     * ② 设置观察者：系统把 adb_wifi_enabled 改成 0 的瞬间 → 立刻恢复。
+     */
+    private fun registerTriggers() {
+        if (netCallback != null) return
+        val cm = getSystemService(ConnectivityManager::class.java)
+        if (cm != null) {
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    if (AdbWifiController.isWifiConnected(this@WatchdogService)) {
+                        maybeRecover("network available")
+                    }
+                }
+
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        maybeRecover("wifi capable")
+                    }
+                }
+
+                override fun onLost(network: Network) {
+                    if (!AdbWifiController.isWifiConnected(this@WatchdogService)) {
+                        updateNotification(R.string.notif_paused_no_wifi)
+                    }
+                }
+            }
+            runCatching { cm.registerDefaultNetworkCallback(cb) }
+                .onSuccess { netCallback = cb }
+                .onFailure { Log.w(TAG, "registerDefaultNetworkCallback failed", it) }
+        }
+        val obs = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean, uri: Uri?) {
+                // 只关心"被关掉"这种情况；我们自己写 1 也会触发，但那时 isEnabled 为 true，不会重复恢复
+                if (!AdbWifiController.isEnabled(this@WatchdogService)) {
+                    maybeRecover("settings changed")
+                }
+            }
+        }
+        runCatching {
+            contentResolver.registerContentObserver(
+                Settings.Global.getUriFor(AdbWifiController.KEY_ADB_WIFI), false, obs
+            )
+        }.onSuccess { settingsObserver = obs }
+            .onFailure { Log.w(TAG, "registerContentObserver failed", it) }
+    }
+
+    private fun unregisterTriggers() {
+        netCallback?.let { cb ->
+            runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) }
+        }
+        netCallback = null
+        settingsObserver?.let { o -> runCatching { contentResolver.unregisterContentObserver(o) } }
+        settingsObserver = null
+    }
+
+    /** 合并触发：同一时间只跑一个恢复任务，内部重试 3 次（每次间隔 1.5 秒）。 */
+    private fun maybeRecover(reason: String) {
+        if (recoveryJob?.isActive == true) return
+        recoveryJob = lifecycleScope.launch {
+            Log.i(TAG, "Recovery trigger: $reason")
+            val p = prefs(this@WatchdogService)
+            delay(500) // 给系统一点时间（Wi-Fi 握手 / 设置写入落地）
+            repeat(3) { attempt ->
+                if (!p.getBoolean(KEY_ENABLED, false)) return@launch
+                if (AdbWifiController.isEnabled(this@WatchdogService)) {
+                    updateNotification(R.string.notif_up)
+                    return@launch
+                }
+                if (!AdbWifiController.isWifiConnected(this@WatchdogService)) {
+                    updateNotification(R.string.notif_paused_no_wifi)
+                    return@launch
+                }
+                updateNotification(R.string.notif_recovering)
+                val outcome = AdbWifiController.recover(this@WatchdogService)
+                if (outcome != null && outcome != AdbWifiController.Strategy.PausedNoWifi) {
+                    Log.i(TAG, "Recovered via $outcome (attempt ${attempt + 1})")
+                    incrementCounter(p, KEY_RECOVERIES)
+                    updateNotification(R.string.notif_up)
+                    return@launch
+                }
+                Log.w(TAG, "Recovery attempt ${attempt + 1} failed")
+                delay(1500)
+            }
+            incrementCounter(p, KEY_FAILURES)
+            updateNotification(R.string.notif_down)
+        }
     }
 
     private suspend fun pollLoop() {
@@ -62,34 +166,18 @@ class WatchdogService : LifecycleService() {
             val intervalMs = prefs.getInt(KEY_INTERVAL_S, DEFAULT_INTERVAL_S).coerceAtLeast(2) * 1000L
             // 心跳：主界面据此判断服务是否还活着
             prefs.edit().putLong(KEY_HEARTBEAT, System.currentTimeMillis()).apply()
-            val enabled = AdbWifiController.isEnabled(this)
 
-            if (!enabled) {
+            if (!AdbWifiController.isEnabled(this)) {
                 if (AdbWifiController.isWifiConnected(this)) {
-                    Log.i(TAG, "Wireless ADB is OFF — attempting recovery")
-                    updateNotification(R.string.notif_recovering)
-                    val outcome = AdbWifiController.recover(this)
-                    if (outcome != null) {
-                        Log.i(TAG, "Recovered via $outcome")
-                        incrementCounter(prefs, KEY_RECOVERIES)
-                    } else {
-                        Log.w(TAG, "Recovery failed")
-                        incrementCounter(prefs, KEY_FAILURES)
-                    }
+                    // 兜底轮询：即使网络回调/设置观察者漏了事件，最多 30 秒也会补一次
+                    maybeRecover("poll")
                 } else {
-                    // No Wi-Fi: recovering is pointless (wireless debugging is bound
-                    // to Wi-Fi). Pause until the network comes back; the next poll
-                    // iteration will retry automatically.
                     Log.i(TAG, "Wireless ADB is OFF but Wi-Fi is disconnected — recovery paused")
+                    updateNotification(R.string.notif_paused_no_wifi)
                 }
+            } else {
+                updateNotification(R.string.notif_up)
             }
-
-            val stateRes = when {
-                AdbWifiController.isEnabled(this) -> R.string.notif_up
-                !AdbWifiController.isWifiConnected(this) -> R.string.notif_paused_no_wifi
-                else -> R.string.notif_down
-            }
-            updateNotification(stateRes)
             delay(intervalMs)
         }
     }
