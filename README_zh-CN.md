@@ -2,108 +2,105 @@
 
 [English](README.md) | 简体中文
 
-本设备端看门狗用于保住**无线调试**（wireless ADB）：轮询
-`Settings.Global.adb_wifi_enabled`，一旦发现它被系统置为 0，优先通过
-**安全设置直写**翻回 1；若该写入不被系统接受，则回退到**无障碍服务**
-驱动设置界面去点开关。
+本设备端看门狗用于保住**无线调试**（wireless ADB）：默认跟随系统事件
+（网络变化、`adb_wifi_enabled` 被改写）即时触发恢复，并以 30 秒轮询兜底；
+优先通过**安全设置直写**把 `Settings.Global.adb_wifi_enabled` 翻回 1，
+写入不被系统接受时回退到**无障碍服务**驱动设置界面去点开关。
 
-> **本 fork 相比上游新增**：
-> - **push 即自动构建发行**：提交到 main 后由 GitHub Actions 自动构建，
->   在 [Releases](../../releases/latest) 以 `latest` 发行版发布 APK，直接下载安装
-> - **无 Wi-Fi 暂停**：手机没连 Wi-Fi 时暂停恢复尝试（无线调试绑定 Wi-Fi，
->   无网时恢复无意义），Wi-Fi 恢复后自动继续，通知栏会显示"已暂停（无 Wi-Fi）"
-> - **界面中英文切换**：主界面底部「中文 / English」按钮，选择持久保存
-> - 版本：v0.2.0（versionCode 2）
+## AI 改动说明（必读）
+
+- 本仓库相对上游 [sumerchoudhary78/adb-watchdog](https://github.com/sumerchoudhary78/adb-watchdog)
+  的**全部改动，均由 AI 编码助手按仓库所有者提出的具体需求完成**。
+- **AI 仅实现人工明确提出的需求**：不自行扩展功能、不做需求之外的重构、
+  不擅自更改包名与既有接口；每一轮改动都先给出文件清单与说明，经人工确认后再提交。
+- APK 由 GitHub Actions 自动构建发布；代码**未经第三方安全审计**，按"尽力而为"提供，
+  涉及系统设置与 ADB 权限，请自行评估风险。
+
+### 版本历史（本 fork）
+
+| 版本 | 主要改动 |
+|---|---|
+| v0.2.0 | 无 Wi-Fi 暂停、界面中英文切换、CI 自动发行 |
+| v0.2.1 | 修复启动崩溃（补 `ACCESS_NETWORK_STATE`） |
+| v0.2.2 | adb 授权命令可点击复制 |
+| v0.2.3 | 状态面板显示无线调试 `IP:端口`（mDNS 自发现） |
+| v0.2.4 | 修复启动崩溃（补 `INTERNET`，NSD 所需） |
+| v0.2.5 | 通知渠道升级 + 运行时申请通知权限；复活链；服务心跳；覆盖安装后自动重启 |
+| v0.2.6 | 打开界面即自愈；通知渠道级别重申；轮询改 30 秒、复活改 10 分钟；新增「上次自动复活」 |
+| v0.2.7 / v0.2.8 | 固定签名：keystore 以 base64 形式随仓库提交，构建时解码 |
+| v0.2.9 | 事件驱动恢复（网络回调 + 设置观察者），Wi-Fi 恢复后秒级触发 |
+| v0.3.0 ~ v0.3.3 | 无障碍入口改为按需显示；新增「打开无线调试设置」按钮；标题栏显示版本号 |
+
+## 当前功能
+
+- **事件驱动恢复**：监听网络变化与 `adb_wifi_enabled`，秒级恢复；30 秒轮询兜底
+- **无 Wi-Fi 自动暂停**：没连 Wi-Fi 时不写开关，通知栏显示「已暂停」
+- **前台服务 + 常驻通知**：通知渠道为「默认」级别，可在「通知设置」里调整
+- **复活链**：10 分钟精确闹钟，服务被杀后自动拉起；开机、覆盖安装后自动重启
+- **状态面板**：无线调试 / 权限 / 无障碍 / Wi-Fi / 无线调试地址 / 通知权限 /
+  服务心跳 / 上次自动复活 / 恢复与失败计数
+- **双语文案**：中文 / English 切换，持久保存
+- **授权辅助**：未授权时显示 adb 命令，点击即复制；未授权时显示无障碍入口
+- **固定签名**：同签名构建可直接覆盖安装，授权不丢
 
 ## 下载安装
 
-到 [Releases 最新发行版](../../releases/latest) 下载 `adb-watchdog-latest.apk`
-直接安装（debug 签名）。注意：
+到 [Releases 最新发行版](../../releases/latest) 下载 `adb-watchdog-latest.apk` 安装。
 
-- 每次 CI 构建的 debug 签名都不同，**覆盖安装会失败**——先卸载旧版再装
-- 重装后 `WRITE_SECURE_SETTINGS` 授权会丢，需要重新执行一次（见下文）
+- **签名已固定**（证书 SHA-256 `778962e7efaaadbcf2b70f2208774626e304071f3c0b8bd520af7d20e3b21f70`），
+  每个发行说明里会打印本次 APK 的实际证书指纹，与本值一致即可**直接覆盖安装**
+- 首次从旧版（历史随机签名版）升级时需**卸载一次**，安装后重新授权
 
-## 为什么要两条恢复路径
+## 一次性设置
 
-主路径直接写 `Settings.Global.adb_wifi_enabled = 1`。它需要
-`WRITE_SECURE_SETTINGS` 权限，普通应用无法通过运行时弹窗申请，只能用
-ADB 授予一次：
-
-```sh
-adb shell pm grant com.luffy.adbwatchdog android.permission.WRITE_SECURE_SETTINGS
-```
-
-该授权重启不失效。授完之后恢复就是瞬时、无感的。
-
-某些 ColorOS 版本会接受写入但 `AdbService` 无视它（没有任何可观察效果）。
-无障碍服务就是这种场景的兜底：通过 intent 打开**开发者选项**，找到
-"无线调试"一行并点击开关。较慢（约 3–5 秒）、无需授权，但对设置界面
-的改版比较脆弱。
-
-## 手机端一次性设置
-
-1. 安装 APK。
-2. 打开 **ADB 看门狗**，打开「看门狗开关」。
-3. 点「打开无障碍设置」→ 启用 **ADB Watchdog (UI fallback)**。
-   *（确信 WRITE_SECURE_SETTINGS 可用时可以跳过，但建议留着当保险。）*
-4. 点「关闭电池优化」→ 选择"不允许优化"。必须做，否则前台服务会被杀。
-5. 电脑上 USB 连一次（或任何可用的 ADB 会话）执行：
+1. 安装 APK，打开 app，打开「看门狗开关」，允许通知
+2. 电脑上执行一次授权（USB ADB 或任意可用 ADB 会话）：
 
    ```sh
    adb shell pm grant com.luffy.adbwatchdog android.permission.WRITE_SECURE_SETTINGS
    ```
 
-6. 点「立即测试恢复」。状态面板应显示 `无线调试 : 开`，恢复计数 +1。
+3. 点「关闭电池优化」→ 选择"不允许优化"
+4. 点「立即测试恢复」，状态面板应显示 `无线调试 : 开`，恢复计数 +1
+
+> 没有 adb 条件时：不授权也可用，但恢复依赖无障碍——打开 app 点
+> 「打开无障碍设置」启用 **ADB Watchdog (UI fallback)** 即可（恢复会慢几秒）。
 
 ## 国产 ROM 保活清单
 
-国产 ROM 会激进地杀后台服务。以下全做，否则看门狗会悄悄死掉：
+**MagicOS（荣耀，实测 ELP-AN00 / Android 16）**
+
+- 设置 → 应用 → 应用启动管理 → ADB 看门狗 → 手动管理：自启动 / 关联启动 / 后台活动 全开
+- 设置 → 通知和状态栏 → ADB 看门狗 → 允许通知，并将「看门狗状态」渠道设为「默认」及以上
+- 多任务界面下拉卡片加锁（防一键清理）
+- 可选：开发者选项 → 快捷设置开发者图块 → 打开「无线调试」，下拉栏一键开关
 
 **ColorOS（OPPO/一加/realme）**
 
-- 设置 → 电池 → ADB Watchdog → 允许后台活动
-- 设置 → 电池 → ADB Watchdog → 自启动
-- 手机管家 → 隐私权限 → 启动管理 → 允许 ADB Watchdog
+- 设置 → 电池 → ADB Watchdog → 允许后台活动 / 自启动
+- 手机管家 → 隐私权限 → 启动管理 → 允许
 
-**MagicOS（荣耀/华为）实测路径**
-
-- 设置 → 应用 → 应用启动管理 → ADB Watchdog → 改为手动管理，
-  允许「自启动 / 关联启动 / 后台活动」
-- 多任务界面下拉 ADB Watchdog 卡片**加锁**，防一键清理
-
-通用：多任务里把卡片下拉加锁，防止被"一键清理"杀掉。如果通知栏那条
-常驻通知消失了，说明服务被系统杀了，重新打开 app 即可复活。
-
-> 已实测（HONOR ELP-AN00，Android 16 / MagicOS）：安全设置直写路径有效，
-> 系统关闭无线调试后数秒内自动恢复。
+> 已实测（MagicOS）：安全设置直写路径有效；通知常驻；切 Wi-Fi 后 1~3 秒恢复。
 
 ## 它不做的事
 
-- 不负责重新配对 ADB 主机。配对信息保存在手机侧；无线调试恢复后，
-  之前配对过且在同一 Wi-Fi 的电脑可以再次 `adb connect <手机IP>:<端口>`。
-  Android 11+ 每次会话端口随机——可在电脑端用 mDNS 发现
-  （`adb mdns services`），一般会自动重连。
-- 不能解锁 PIN/图案/密码锁屏（无障碍兜底只处理滑动锁屏）。
-- 恢复出厂设置后授权失效，需重新授予 `WRITE_SECURE_SETTINGS`。
-- **手机重启后无线调试仍需手动开一次**（系统安全设计，无 root 无解）；
-  开完之后看门狗即接管一切。
+- 不负责重新配对 ADB 主机；端口每次会话随机，电脑端可用 `adb mdns services` 发现
+- 不能解锁 PIN/图案/密码锁屏
+- 恢复出厂设置后授权失效，需重新授予 `WRITE_SECURE_SETTINGS`
+- **手机重启后需手动开一次无线调试**（系统安全设计，无 root 无解），之后由看门狗接管
+- 无法直达 MagicOS 的「无线调试」子页（系统没有对外暴露该页面，只能打开开发者选项）
 
 ## 构建
 
-需要 JDK 17 和 Android SDK 34。在本目录：
+需要 JDK 17 与 Android SDK 34：
 
 ```sh
-# 如果还没有 gradle wrapper：
-gradle wrapper --gradle-version 8.7
-
 ./gradlew :app:assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-或者直接用 Android Studio 打开导入。
-
-本 fork 已配置 GitHub Actions（`.github/workflows/main.yml`）：push 到
-main 即自动构建并把 APK 发布到 `latest` Release。
+签名：仓库根目录的 `debug.keystore` 由 CI 从 `keystore/debug.keystore.b64` 解码生成，
+`app/build.gradle.kts` 中的 `fixedDebug` 签名配置直接引用（本地构建需自行放置该文件）。
 
 ## 目录结构
 
@@ -112,10 +109,11 @@ app/src/main/
 ├── AndroidManifest.xml
 ├── kotlin/com/luffy/adbwatchdog/
 │   ├── AdbWifiController.kt      # 读写安全设置 + 分发兜底恢复（含 Wi-Fi 检测）
-│   ├── WatchdogService.kt        # 前台服务轮询（无 Wi-Fi 时暂停）
-│   ├── WatchdogAccessibilityService.kt  # 界面兜底恢复
-│   ├── BootReceiver.kt           # 开机自启（若开关已启用）
-│   └── MainActivity.kt           # 状态界面 + 开关 + 中英文切换
+│   ├── WatchdogService.kt        # 前台服务：事件驱动恢复 + 轮询兜底 + 心跳
+│   ├── ReviveReceiver.kt         # 10 分钟精确闹钟复活链
+│   ├── WatchdogAccessibilityService.kt  # 界面兜底恢复（可选）
+│   ├── BootReceiver.kt           # 开机 / 覆盖安装后重启
+│   └── MainActivity.kt           # 状态面板 + 开关 + 语言切换 + 授权提示
 └── res/
     ├── layout/activity_main.xml
     ├── values/{strings,themes}.xml        # 英文
